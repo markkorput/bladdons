@@ -63,9 +63,11 @@ class Runner:
         for ow in self.object_wrappers():
             for propwrap in ow.property_wrappers():
                 val = propwrap.update()
-                if val:
+                #print('checking '+propwrap.property_name+": "+str(val)+" (prev val: "+str(propwrap.prev_value)+")")
+                if val != None:
                     self.osc_sender.send(propwrap.property_name, [val])
-                    # print('TODO: send ' + propwrap.property_name + ' with ' + str(val))
+                    # logging.getLogger().info(propwrap.property_name + " " + str(val))
+                    # print(propwrap.property_name + " " + str(val))
 
     def object_wrappers(self):
         if self._object_wrappers:
@@ -139,14 +141,13 @@ class PropertyWrapper:
 
     def update(self):
         changed = self.changed_value()
-        if changed:
+        if changed != None:
             self.prev_value = changed
         return changed
 
 #
 # bl2030 add-on stuff
 #
-
 
 def setup():
     logging.getLogger().debug('bl2030.setup')
