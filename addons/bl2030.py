@@ -71,6 +71,8 @@ class Runner:
 
     def object_wrappers(self):
         if self._object_wrappers:
+            if Config().debugging:
+                self._update_object_wrappers()
             return self._object_wrappers
         self._object_wrappers = self._get_relevant_object_wrappers()
 
@@ -88,6 +90,28 @@ class Runner:
             if objwrap.is_relevant():
                 result.append(objwrap)
         return result
+
+    def _update_object_wrappers(self):
+        for obj in bpy.context.scene.objects:
+            if self._already_registered(obj.name):
+                continue
+
+            objwrap = ObjectWrapper(obj)
+
+            if objwrap.is_relevant():
+                if not self._object_wrappers:
+                    self._object_wrappers = []
+
+                self._object_wrappers.append(objwrap)
+
+    def _already_registered(self, obj_name):
+        if not self._object_wrappers:
+            return False
+
+        for existing in self._object_wrappers:
+            if existing.obj.name == obj_name:
+                return True
+        return False
 
 class ObjectWrapper:
     def __init__(self, obj):
@@ -114,6 +138,8 @@ class ObjectWrapper:
 
     def property_wrappers(self):
         if self._prop_wrappers:
+            if Config().debugging:
+                self._update_prop_wrappers()
             return self._prop_wrappers
         self._prop_wrappers = self._get_prop_wrappers()
         return self._prop_wrappers
@@ -123,6 +149,26 @@ class ObjectWrapper:
         for prop_name in self.prop_names():
             result.append(PropertyWrapper(self.obj, prop_name))
         return result
+
+    def _update_prop_wrappers(self):
+        for prop_name in self._get_relevant_property_names():
+            if self._already_registered(prop_name):
+                continue
+
+            if not self._prop_wrappers:
+                self._prop_wrappers = []
+
+            wrap = PropertyWrapper(self.obj, prop_name)
+            self._prop_wrappers.append(wrap)
+
+    def _already_registered(self, prop_name):
+        if not self._prop_wrappers:
+            return False
+
+        for existing in self._prop_wrappers:
+            if existing.property_name == prop_name:
+                return True
+        return False
 
 class PropertyWrapper:
     def __init__(self, obj, property_name):
