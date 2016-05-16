@@ -60,6 +60,16 @@ class Runner:
         if not self.is_setup:
             self.setup()
 
+        # check if we reached any of the markers,
+        # if so, emit and OSC message
+        cur_frame = bpy.context.scene.frame_current
+        for marker in bpy.context.scene.timeline_markers:
+            if marker.frame == cur_frame and marker.name.startswith('/'):
+                self.osc_sender.send(marker.name)
+                # print('Marker osc: '+marker.name)
+
+        # check for each propert rapper if teh value changed,
+        # if so; emit an OSC message
         for ow in self.object_wrappers():
             for propwrap in ow.property_wrappers():
                 val = propwrap.update()
