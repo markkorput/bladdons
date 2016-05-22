@@ -61,26 +61,29 @@ class Runner:
                 if self.config.verbose:
                     print(' - OSC from marker: '+marker.name)
 
-        # check for each propert rapper if teh value changed,
+        # check for each property wrapper if the value changed,
         # if so; emit an OSC message
         for ow in self.object_wrappers():
             for propwrap in ow.property_wrappers():
                 val = propwrap.update()
                 #print('checking '+propwrap.property_name+": "+str(val)+" (prev val: "+str(propwrap.prev_value)+")")
                 if val != None:
-                    self.osc_sender.send(propwrap.property_name, [val])
+                    addr = ow.prefix + propwrap.property_name
+                    self.osc_sender.send(addr, [val])
                     if self.config.verbose:
-                        print(' - OSC from property: {0} {1}'.format(propwrap.property_name, str(val)))
+                        print(' - OSC from property: {0} {1}'.format(addr, str(val)))
 
     def object_wrappers(self):
         if self._object_wrappers:
             if self.config.live_update:
                 self._update_object_wrappers()
             return self._object_wrappers
+
         self._object_wrappers = self._get_relevant_object_wrappers()
 
-        for ow in self._object_wrappers:
-            print('Found object: '+ow.obj.name)
+        if self.config.verbose:
+            for ow in self._object_wrappers:
+                print('OSC object: {0} (prefix: {1})'.format(ow.obj.name, ow.prefix))
             for propwrap in ow.property_wrappers():
                 print(' - ' + propwrap.property_name + ': ' +str(propwrap.get_current_value()))
 
@@ -96,7 +99,9 @@ class Runner:
 
     def _update_object_wrappers(self):
         for obj in self.scene.objects:
-            if self._already_registered(obj.name):
+            wrap = self._existing_wrapper(obj)
+            if wrap:
+                wrap.setup()
                 continue
 
             objwrap = ObjectWrapper(obj, self.config)
@@ -107,14 +112,14 @@ class Runner:
 
                 self._object_wrappers.append(objwrap)
 
-    def _already_registered(self, obj_name):
+    def _existing_wrapper(self, obj):
         if not self._object_wrappers:
-            return False
+            return None
 
         for existing in self._object_wrappers:
-            if existing.obj.name == obj_name:
-                return True
-        return False
+            if existing.obj == obj:
+                return existing
+        return None
 
 class ObjectWrapper:
     def __init__(self, obj, config):
@@ -122,6 +127,19 @@ class ObjectWrapper:
         self.config = config
         self._prop_names = None
         self._prop_wrappers = None
+        self.setup()
+
+    def setup(self):
+        self.prefix = self._get_prefix()
+
+    def _get_prefix(self):
+        prefix = ''
+        o = self.obj
+        while o:
+            if o.name.startswith('/'):
+                prefix = o.name + prefix
+            o = o.parent
+        return prefix
 
     def is_relevant(self):
         return len(self.prop_names()) > 0
@@ -156,7 +174,7 @@ class ObjectWrapper:
 
     def _update_prop_wrappers(self):
         for prop_name in self._get_relevant_property_names():
-            if self._already_registered(prop_name):
+            if self._existing_wrapper(prop_name):
                 continue
 
             if not self._prop_wrappers:
@@ -165,14 +183,14 @@ class ObjectWrapper:
             wrap = PropertyWrapper(self.obj, prop_name)
             self._prop_wrappers.append(wrap)
 
-    def _already_registered(self, prop_name):
+    def _existing_wrapper(self, prop_name):
         if not self._prop_wrappers:
-            return False
+            return None
 
         for existing in self._prop_wrappers:
             if existing.property_name == prop_name:
-                return True
-        return False
+                return existing
+        return None
 
 class PropertyWrapper:
     def __init__(self, obj, property_name):
@@ -194,7 +212,6 @@ class PropertyWrapper:
         if changed != None:
             self.prev_value = changed
         return changed
-
 
 #
 # bl2030 add-on stuff
