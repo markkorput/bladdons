@@ -64,6 +64,9 @@ class Runner:
         # check for each property wrapper if the value changed,
         # if so; emit an OSC message
         for ow in self.object_wrappers():
+            if ow.obj.hide:
+                continue
+
             for propwrap in ow.property_wrappers():
                 val = propwrap.update()
                 #print('checking '+propwrap.property_name+": "+str(val)+" (prev val: "+str(propwrap.prev_value)+")")
