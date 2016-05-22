@@ -17,14 +17,6 @@ import logging
 
 # bl2030 packages
 
-
-# TODO; this should be configurable through a UI panel
-class Config:
-    def __init__(self):
-        self.osc_host = '127.0.0.1'
-        self.osc_port = '2031'
-        self.debugging = True
-
 class Runner:
     _instance = None
     _instances = {}
@@ -38,35 +30,36 @@ class Runner:
     def instance_for(target):
         if target in Runner._instances:
             return Runner._instances[target]
-        Runner._instances[target] = Runner()
+        Runner._instances[target] = Runner(target)
         return Runner._instances[target]
 
-    def __init__(self, options = {}):
-        self.options = options
+    def __init__(self, scene):
+        self.scene = scene
+        self.config = scene.bl2030cfg
+        self.osc_sender = self._get_osc_sender()
         self._object_wrappers = None
-        self.osc_sender = None
-        self.is_setup = False
 
-    def setup(self):
-        self.object_wrappers()
-        cfg = Config()
+    def _get_osc_sender(self):
         from osc_sender import OscSender
-        self.osc_sender = OscSender({'host': cfg.osc_host, 'port': cfg.osc_port})
-        self.osc_sender.setup()
-        self.is_setup = True
+        osc_sender = OscSender({'host': self.config.host, 'port': self.config.port})
+        osc_sender.setup()
         del OscSender
+        return osc_sender
 
     def update(self):
-        if not self.is_setup:
-            self.setup()
+        if self.config.live_update:
+            if self.osc_sender.host() != self.config.host or self.osc_sender.port() != self.config.port:
+                self.osc_sender.destroy()
+                self.osc_sender = self._get_osc_sender()
 
         # check if we reached any of the markers,
         # if so, emit and OSC message
-        cur_frame = bpy.context.scene.frame_current
-        for marker in bpy.context.scene.timeline_markers:
+        cur_frame = self.scene.frame_current
+        for marker in self.scene.timeline_markers:
             if marker.frame == cur_frame and marker.name.startswith('/'):
                 self.osc_sender.send(marker.name)
-                # print('Marker osc: '+marker.name)
+                if self.config.verbose:
+                    print(' - OSC from marker: '+marker.name)
 
         # check for each propert rapper if teh value changed,
         # if so; emit an OSC message
@@ -76,12 +69,12 @@ class Runner:
                 #print('checking '+propwrap.property_name+": "+str(val)+" (prev val: "+str(propwrap.prev_value)+")")
                 if val != None:
                     self.osc_sender.send(propwrap.property_name, [val])
-                    # logging.getLogger().info(propwrap.property_name + " " + str(val))
-                    # print(propwrap.property_name + " " + str(val))
+                    if self.config.verbose:
+                        print(' - OSC from property: {0} {1}'.format(propwrap.property_name, str(val)))
 
     def object_wrappers(self):
         if self._object_wrappers:
-            if Config().debugging:
+            if self.config.live_update:
                 self._update_object_wrappers()
             return self._object_wrappers
         self._object_wrappers = self._get_relevant_object_wrappers()
@@ -95,18 +88,18 @@ class Runner:
 
     def _get_relevant_object_wrappers(self):
         result = []
-        for obj in bpy.context.scene.objects:
-            objwrap = ObjectWrapper(obj)
+        for obj in self.scene.objects:
+            objwrap = ObjectWrapper(obj, self.config)
             if objwrap.is_relevant():
                 result.append(objwrap)
         return result
 
     def _update_object_wrappers(self):
-        for obj in bpy.context.scene.objects:
+        for obj in self.scene.objects:
             if self._already_registered(obj.name):
                 continue
 
-            objwrap = ObjectWrapper(obj)
+            objwrap = ObjectWrapper(obj, self.config)
 
             if objwrap.is_relevant():
                 if not self._object_wrappers:
@@ -124,8 +117,9 @@ class Runner:
         return False
 
 class ObjectWrapper:
-    def __init__(self, obj):
+    def __init__(self, obj, config):
         self.obj = obj
+        self.config = config
         self._prop_names = None
         self._prop_wrappers = None
 
@@ -148,7 +142,7 @@ class ObjectWrapper:
 
     def property_wrappers(self):
         if self._prop_wrappers:
-            if Config().debugging:
+            if self.config.live_update:
                 self._update_prop_wrappers()
             return self._prop_wrappers
         self._prop_wrappers = self._get_prop_wrappers()
@@ -201,43 +195,57 @@ class PropertyWrapper:
             self.prev_value = changed
         return changed
 
+
 #
 # bl2030 add-on stuff
 #
 
-def setup():
-    logging.getLogger().debug('bl2030.setup')
-    Runner.instance().setup()
-    # global manager
-    # manager = Manager()
-    # bpy.app.handlers.game_post.append(destroy)
+# This class is in charge of the blender UI config panel
+class Panel(bpy.types.Panel):
+    """Creates a Panel in the Object properties window"""
+    bl_label = "2030"
+    bl_idname = "SCENE_bl2030"
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = "object"
 
-# # This method should be called by a controller in the blender object's
-# # game logic and that controller should be triggered by an 'always' sensor,
-# # with TRUE level triggering enabled (Pulse mode) so it gets called every game-loop iteration
-# def update(controller):
-#     owner = controller.owner
-#     bl2030.for_owner(owner).update()
+    def draw(self, context):
+        layout = self.layout
+        config = context.scene.bl2030cfg
 
-@persistent
-def destroy(scene):
-    logging.getLogger().debug('bl2030.destroy')
-    Runner.instance().destroy()
-    #
-    # for instance in PyMoCap._instances_by_owner.values():
-    #     instance.destroy()
-    #     PyMoCap._instances_by_owner = {}
+        layout.row().prop(config, "host")
+        layout.row().prop(config, "port")
+        layout.row().prop(config, "live_update")
+        layout.row().prop(config, "verbose")
+        #layout.row().label('Last Messages:\n'+config.last_messages)
+
+# This class represents the bl2030 config data (that the UI Panel interacts with)
+class Config(bpy.types.PropertyGroup):
+  @classmethod
+  def register(cls):
+    bpy.types.Scene.bl2030cfg = bpy.props.PointerProperty(
+      name="bl2030 Config",
+      description="Scene-specific bl2030 settings",
+      type=cls)
+
+    # Add in the properties
+    # cls.enabled = bpy.props.BoolProperty(name="enabled", default=False, description="Enable bl2030")
+    cls.port = bpy.props.IntProperty(name="Port", soft_max=9999, soft_min=0, description="Port to send OSC messages to")
+    cls.host = bpy.props.StringProperty(name="Host", default="127.0.0.1")
+    cls.live_update = bpy.props.BoolProperty(name="live_update", default=False)
+    cls.verbose = bpy.props.BoolProperty(name="verbose", default=False)
+    # cls.last_messages = bpy.props.StringProperty(name="Last Messages", default="")
 
 @persistent
 def frameHandler(scene):
     Runner.instance_for(scene).update()
 
 def register():
-  # bpy.utils.register_module(__name__)
+  bpy.utils.register_module(__name__)
   bpy.app.handlers.frame_change_pre.append(frameHandler)
 
 def unregister():
-  # bpy.utils.unregister_module(__name__)
+  bpy.utils.unregister_module(__name__)
   bpy.app.handlers.frame_change_pre.remove(frameHandler)
 
 if __name__ == "__main__":
