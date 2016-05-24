@@ -1,17 +1,15 @@
 
 # import json
-import logging
+import logging #,socket
 
 try:
     # import OSC
     from pythonosc.osc_message_builder import OscMessageBuilder
     from pythonosc.udp_client import UDPClient
-except ImportError:
-    # logging.getLogger().warning("importing embedded version of pyOSC library for OscWriter")
-    # import local.OSC as OSC
+except ImportError as e:
+    # logging.getLogger().warning("Could not import pyOSC library for OscSender:")
+    # logging.getLogger().warning(e)
     logging.getLogger().warning("Could not import pythonosc library for OscSender")
-    # from pythonosc.osc_message_builder import OscMessageBuilder
-    # from pythonosc.udp_client import UDPClient
 
 class OscSender:
     def __init__(self, options = {}):
@@ -62,11 +60,18 @@ class OscSender:
         try:
             # self.client = OSC.OSCClient()
             # self.client.connect((self.host(), self.port()))
-            self.client = UDPClient(self.host(), self.port())
-            if self.host().endswith('.255'):
-                logging.getLogger().warn("OSC broadcast destination detected")
-                self.client._sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            # if self.host().endswith('.255'):
+            #     logging.getLogger().warn("OSC broadcast destination detected")
+            #     self.client.socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
+            self.client = UDPClient(self.host(), self.port())
+            # sndbufsize = 4096 * 8
+            # self.client._sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, sndbufsize)
+            # self.client._sock.connect((self.host(), self.port()))
+            #
+            # if self.host().endswith('.255'):
+            #     logging.getLogger().warn("OSC broadcast destination detected")
+            #     self.client._sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         except Exception as err: #OSC.OSCClientError as err:
             logging.getLogger().error("OSC connection failure: {0}".format(err))
             return False
@@ -89,6 +94,7 @@ class OscSender:
         # msg.setAddress(tag) # set OSC address
         # for param in params:
         #     msg.append(param)
+
         msg = OscMessageBuilder(address = addr)
         for param in params:
             msg.add_arg(param)

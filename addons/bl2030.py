@@ -18,14 +18,7 @@ import logging
 # bl2030 packages
 
 class Runner:
-    _instance = None
     _instances = {}
-
-    def instance():
-        if Runner._instance:
-            return Runner._instance
-        Runner._instance = Runner()
-        return Runner._instance
 
     def instance_for(target):
         if target in Runner._instances:
@@ -39,24 +32,29 @@ class Runner:
         self.osc_sender = self._get_osc_sender()
         self._object_wrappers = None
 
-    def send_obj_props(self, object):
-        if self.config.live_update:
-            if self.osc_sender.host() != self.config.host or self.osc_sender.port() != self.config.port:
-                self.osc_sender.destroy()
-                self.osc_sender = self._get_osc_sender()
-
+    def send_obj_props(self, object, recursive=False):
+        sender = self.sender()
         # check for each property wrapper if the value changed,
         # if so; emit an OSC message
-        for ow in self.object_wrappers():
-            if ow.obj != object:
-                continue
-
+        ow = ObjectWrapper.instance_for(object)
+        if recursive:
+            ows = ow.offspring()
+            ows.append(ow)
+        else:
+            ows = [ow]
+        for ow in ows:
             for propwrap in ow.property_wrappers():
                 val = propwrap.get_current_value()
                 addr = ow.prefix + propwrap.property_name
-                self.osc_sender.send(addr, [val])
+                sender.send(addr, [val])
                 if self.config.verbose:
                     print(' - OSC from property: {0} {1}'.format(addr, str(val)))
+
+    def sender(self):
+        if self.osc_sender.host() != self.config.host or self.osc_sender.port() != self.config.port:
+            self.osc_sender.destroy()
+            self.osc_sender = self._get_osc_sender()
+        return self.osc_sender
 
     def _get_osc_sender(self):
         from osc_sender import OscSender
@@ -66,17 +64,13 @@ class Runner:
         return osc_sender
 
     def update(self):
-        if self.config.live_update:
-            if self.osc_sender.host() != self.config.host or self.osc_sender.port() != self.config.port:
-                self.osc_sender.destroy()
-                self.osc_sender = self._get_osc_sender()
-
+        sender = self.sender()
         # check if we reached any of the markers,
         # if so, emit and OSC message
         cur_frame = self.scene.frame_current
         for marker in self.scene.timeline_markers:
             if marker.frame == cur_frame and marker.name.startswith('/'):
-                self.osc_sender.send(marker.name)
+                sender.send(marker.name)
                 if self.config.verbose:
                     print(' - OSC from marker: '+marker.name)
 
@@ -91,67 +85,32 @@ class Runner:
                 #print('checking '+propwrap.property_name+": "+str(val)+" (prev val: "+str(propwrap.prev_value)+")")
                 if val != None:
                     addr = ow.prefix + propwrap.property_name
-                    self.osc_sender.send(addr, [val])
+                    sender.send(addr, [val])
                     if self.config.verbose:
                         print(' - OSC from property: {0} {1}'.format(addr, str(val)))
 
     def object_wrappers(self):
-        if self._object_wrappers:
-            if self.config.live_update:
-                self._update_object_wrappers()
-            return self._object_wrappers
-
-        self._object_wrappers = self._get_relevant_object_wrappers()
-
-        if self.config.verbose:
-            for ow in self._object_wrappers:
-                print('OSC object: {0} (prefix: {1})'.format(ow.obj.name, ow.prefix))
-            for propwrap in ow.property_wrappers():
-                print(' - ' + propwrap.property_name + ': ' +str(propwrap.get_current_value()))
-
-        return self._object_wrappers
-
-    def _get_relevant_object_wrappers(self):
         result = []
         for obj in self.scene.objects:
-            objwrap = ObjectWrapper(obj, self.config)
+            objwrap = ObjectWrapper.instance_for(obj)
             if objwrap.is_relevant():
                 result.append(objwrap)
         return result
 
-    def _update_object_wrappers(self):
-        for obj in self.scene.objects:
-            wrap = self._existing_wrapper(obj)
-            if wrap:
-                wrap.setup()
-                continue
-
-            objwrap = ObjectWrapper(obj, self.config)
-
-            if objwrap.is_relevant():
-                if not self._object_wrappers:
-                    self._object_wrappers = []
-
-                self._object_wrappers.append(objwrap)
-
-    def _existing_wrapper(self, obj):
-        if not self._object_wrappers:
-            return None
-
-        for existing in self._object_wrappers:
-            if existing.obj == obj:
-                return existing
-        return None
-
 class ObjectWrapper:
-    def __init__(self, obj, config):
+    _instances = {}
+
+    def instance_for(obj):
+        if obj in ObjectWrapper._instances:
+            return ObjectWrapper._instances[obj]
+        ow = ObjectWrapper(obj)
+        ObjectWrapper._instances[obj] = ow
+        return ow
+
+    def __init__(self, obj):
         self.obj = obj
-        self.config = config
         self._prop_names = None
         self._prop_wrappers = None
-        self.setup()
-
-    def setup(self):
         self.prefix = self._get_prefix()
 
     def _get_prefix(self):
@@ -167,12 +126,6 @@ class ObjectWrapper:
         return len(self.prop_names()) > 0
 
     def prop_names(self):
-        if self._prop_names:
-            return self._prop_names
-        self._prop_names = self._get_relevant_property_names()
-        return self._prop_names
-
-    def _get_relevant_property_names(self):
         prop_names = []
         all_prop_names = self.obj.keys()
         for prop_name in all_prop_names:
@@ -181,40 +134,30 @@ class ObjectWrapper:
         return prop_names
 
     def property_wrappers(self):
-        if self._prop_wrappers:
-            if self.config.live_update:
-                self._update_prop_wrappers()
-            return self._prop_wrappers
-        self._prop_wrappers = self._get_prop_wrappers()
-        return self._prop_wrappers
-
-    def _get_prop_wrappers(self):
         result = []
         for prop_name in self.prop_names():
-            result.append(PropertyWrapper(self.obj, prop_name))
+            result.append(PropertyWrapper.instance_for(self.obj, prop_name))
         return result
 
-    def _update_prop_wrappers(self):
-        for prop_name in self._get_relevant_property_names():
-            if self._existing_wrapper(prop_name):
-                continue
-
-            if not self._prop_wrappers:
-                self._prop_wrappers = []
-
-            wrap = PropertyWrapper(self.obj, prop_name)
-            self._prop_wrappers.append(wrap)
-
-    def _existing_wrapper(self, prop_name):
-        if not self._prop_wrappers:
-            return None
-
-        for existing in self._prop_wrappers:
-            if existing.property_name == prop_name:
-                return existing
-        return None
+    def offspring(self):
+        result = []
+        for child in self.obj.children:
+            ow = ObjectWrapper.instance_for(child)
+            result.append(ow)
+            result.extend(ow.offspring())
+        return result
 
 class PropertyWrapper:
+    _instances = {}
+
+    def instance_for(obj, property_name):
+        identifier = obj.name+"."+property_name
+        if identifier in PropertyWrapper._instances:
+            return PropertyWrapper._instances[identifier]
+        ow = PropertyWrapper(obj, property_name)
+        PropertyWrapper._instances[identifier] = ow
+        return ow
+
     def __init__(self, obj, property_name):
         self.obj = obj
         self.property_name = property_name
@@ -253,9 +196,10 @@ class Panel(bpy.types.Panel):
         config = context.scene.bl2030cfg
 
         layout.row().operator("object.bl2030sendobjprops", text="Send all object's properties")
+        layout.row().operator("object.bl2030sendobjfamilyprops", text="Send all object and children's properties")
         layout.row().prop(config, "host")
         layout.row().prop(config, "port")
-        layout.row().prop(config, "live_update")
+        # layout.row().prop(config, "live_update")
         layout.row().prop(config, "verbose")
 
 
@@ -274,7 +218,7 @@ class Config(bpy.types.PropertyGroup):
     # cls.enabled = bpy.props.BoolProperty(name="enabled", default=False, description="Enable bl2030")
     cls.port = bpy.props.IntProperty(name="Port", soft_max=9999, soft_min=0, description="Port to send OSC messages to")
     cls.host = bpy.props.StringProperty(name="Host", default="127.0.0.1")
-    cls.live_update = bpy.props.BoolProperty(name="live_update", default=False)
+    # cls.live_update = bpy.props.BoolProperty(name="live_update", default=False)
     cls.verbose = bpy.props.BoolProperty(name="verbose", default=False)
     # cls.last_messages = bpy.props.StringProperty(name="Last Messages", default="")
 
@@ -291,6 +235,20 @@ class Bl2030ObjPropsSender(bpy.types.Operator):
 
     def execute(self, context):
         Runner.instance_for(context.scene).send_obj_props(context.object)
+        return {'FINISHED'}
+
+class Bl2030ObjFamilyPropsSender(bpy.types.Operator):
+    """Tooltip"""
+    bl_idname = "object.bl2030sendobjfamilyprops"
+    bl_label = "PointCloud"
+    # bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.object and context.scene
+
+    def execute(self, context):
+        Runner.instance_for(context.scene).send_obj_props(context.object, True)
         return {'FINISHED'}
 
 @persistent
