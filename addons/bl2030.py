@@ -199,7 +199,7 @@ class PropertyWrapper:
     def __init__(self, obj, property_name):
         self.obj = obj
         self.property_name = property_name
-        self.prev_value = None
+        self.prev_value = self.get_current_value()
 
     def get_current_value(self):
         return self.obj[self.property_name]
