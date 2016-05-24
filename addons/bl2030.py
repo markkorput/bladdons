@@ -39,6 +39,25 @@ class Runner:
         self.osc_sender = self._get_osc_sender()
         self._object_wrappers = None
 
+    def send_obj_props(self, object):
+        if self.config.live_update:
+            if self.osc_sender.host() != self.config.host or self.osc_sender.port() != self.config.port:
+                self.osc_sender.destroy()
+                self.osc_sender = self._get_osc_sender()
+
+        # check for each property wrapper if the value changed,
+        # if so; emit an OSC message
+        for ow in self.object_wrappers():
+            if ow.obj != object:
+                continue
+
+            for propwrap in ow.property_wrappers():
+                val = propwrap.get_current_value()
+                addr = ow.prefix + propwrap.property_name
+                self.osc_sender.send(addr, [val])
+                if self.config.verbose:
+                    print(' - OSC from property: {0} {1}'.format(addr, str(val)))
+
     def _get_osc_sender(self):
         from osc_sender import OscSender
         osc_sender = OscSender({'host': self.config.host, 'port': self.config.port})
@@ -233,10 +252,13 @@ class Panel(bpy.types.Panel):
         layout = self.layout
         config = context.scene.bl2030cfg
 
+        layout.row().operator("object.bl2030sendobjprops", text="Send all object's properties")
         layout.row().prop(config, "host")
         layout.row().prop(config, "port")
         layout.row().prop(config, "live_update")
         layout.row().prop(config, "verbose")
+
+
         #layout.row().label('Last Messages:\n'+config.last_messages)
 
 # This class represents the bl2030 config data (that the UI Panel interacts with)
@@ -255,6 +277,21 @@ class Config(bpy.types.PropertyGroup):
     cls.live_update = bpy.props.BoolProperty(name="live_update", default=False)
     cls.verbose = bpy.props.BoolProperty(name="verbose", default=False)
     # cls.last_messages = bpy.props.StringProperty(name="Last Messages", default="")
+
+
+class Bl2030ObjPropsSender(bpy.types.Operator):
+    """Tooltip"""
+    bl_idname = "object.bl2030sendobjprops"
+    bl_label = "PointCloud"
+    # bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.object and context.scene
+
+    def execute(self, context):
+        Runner.instance_for(context.scene).send_obj_props(context.object)
+        return {'FINISHED'}
 
 @persistent
 def frameHandler(scene):
