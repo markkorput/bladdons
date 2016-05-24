@@ -63,6 +63,10 @@ class OscSender:
             # self.client = OSC.OSCClient()
             # self.client.connect((self.host(), self.port()))
             self.client = UDPClient(self.host(), self.port())
+            if self.host().endswith('.255'):
+                logging.getLogger().warn("OSC broadcast destination detected")
+                self.client._sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+
         except Exception as err: #OSC.OSCClientError as err:
             logging.getLogger().error("OSC connection failure: {0}".format(err))
             return False
