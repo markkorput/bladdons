@@ -13,7 +13,6 @@ bl_info = {
 
 import bpy
 from bpy.app.handlers import persistent
-import logging
 
 # bl2030 packages
 
@@ -27,6 +26,7 @@ class Runner:
         return Runner._instances[target]
 
     def __init__(self, scene):
+        # print("Runner.__init__")
         self.scene = scene
         self.config = scene.bl2030cfg
         self.osc_sender = self._get_osc_sender()
@@ -45,7 +45,7 @@ class Runner:
         for ow in ows:
             for propwrap in ow.property_wrappers():
                 val = propwrap.get_current_value()
-                addr = ow.prefix + propwrap.property_name
+                addr = ow.osc_prefix() + propwrap.property_name
                 sender.send(addr, [val])
                 if self.config.verbose:
                     print(' - OSC from property: {0} {1}'.format(addr, str(val)))
@@ -57,6 +57,7 @@ class Runner:
         return self.osc_sender
 
     def _get_osc_sender(self):
+        # print("Runner._get_osc_sender")
         from osc_sender import OscSender
         osc_sender = OscSender({'host': self.config.host, 'port': self.config.port})
         osc_sender.setup()
@@ -84,7 +85,7 @@ class Runner:
                 val = propwrap.update()
                 #print('checking '+propwrap.property_name+": "+str(val)+" (prev val: "+str(propwrap.prev_value)+")")
                 if val != None:
-                    addr = ow.prefix + propwrap.property_name
+                    addr = ow.osc_prefix() + propwrap.property_name
                     sender.send(addr, [val])
                     if self.config.verbose:
                         print(' - OSC from property: {0} {1}'.format(addr, str(val)))
@@ -111,14 +112,20 @@ class ObjectWrapper:
         self.obj = obj
         self._prop_names = None
         self._prop_wrappers = None
+        self.objname = self.obj.name
         self.prefix = self._get_prefix()
+
+    def osc_prefix(self):
+        if self.obj.name != self.objname:
+            self.prefix = self._get_prefix()
+        return self.prefix
 
     def _get_prefix(self):
         prefix = ''
         o = self.obj
         while o:
             if o.name.startswith('/'):
-                prefix = o.name + prefix
+                prefix = o.name.split('#')[0] + prefix
             o = o.parent
         return prefix
 
