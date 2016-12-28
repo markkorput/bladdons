@@ -59,3 +59,4 @@ class Game:
         self.ui.update()
         self.spawner.update()
         self.spawner.spawn(self.http_rot.rotation)
+        self.http_rot.update()
