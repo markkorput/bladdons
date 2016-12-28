@@ -1,7 +1,7 @@
-import logging, bge, bpy, re, math
+import logging, bpy
 from .ui import Ui
-from .web_server import WebServer
 from .spawner import Spawner
+from .http_rot import HttpRot
 
 def setup(controller):
     Game.for_owner(controller.owner).setup()
@@ -34,20 +34,15 @@ class Game:
 
         self.ui = Ui.singleton(verbose=verbose)
         self.spawner = Spawner(verbose=verbose)
-
-        self.web_server = WebServer({
-            'verbose': verbose,
-            'serve': 'scripts/www/'})
+        self.http_rot = HttpRot()
 
     def __del__(self):
         self.destroy()
 
     def setup(self):
         self.ui.setup()
-        self.web_server.setup()
+        self.http_rot.setup()
         self.spawner.setup(logicObject=self.owner)
-
-        self.web_server.requestEvent += self._onRequest
         bpy.app.handlers.game_post.append(self._onGameEnded)
 
     def _onGameEnded(self, scene):
@@ -55,10 +50,7 @@ class Game:
 
     def destroy(self):
         self.spawner.destroy()
-        self.web_server.destroy()
-
-        if self._onRequest in self.web_server.requestEvent:
-            self.web_server.requestEvent -= self._onRequest
+        self.http_rot.destroy()
 
         if self._onGameEnded in bpy.app.handlers.game_post:
             bpy.app.handlers.game_post.remove(self._onGameEnded)
@@ -66,28 +58,4 @@ class Game:
     def update(self):
         self.ui.update()
         self.spawner.update()
-        self.spawner.spawn()
-
-    def _onRequest(self, handler):
-        result = re.compile('^\/rot/(.+)\/(.+)\/(.+)$').findall(handler.path)
-        if len(result) != 1 or len(result[0]) != 3:
-            return
-
-        try:
-            a = float(result[0][0])
-        except:
-            a = 0.0
-
-        try:
-            b = float(result[0][1])
-        except:
-            b = 0.0
-
-        try:
-            c = float(result[0][2])
-        except:
-            c = 0.0
-
-        self.logger.debug('Got orientation data from HTTP-server: {0}, {1}, {2}'.format(a,b,c))
-        # self.orientator.localOrientation = [math.radians(c),math.radians(-b),math.radians(a)]
-        self.spawner.rotation = [math.radians(c),math.radians(-b),math.radians(a)]
+        self.spawner.spawn(self.http_rot.rotation)

@@ -16,7 +16,6 @@ class Spawner:
         self.spawn_parent = self.logicObject.scene.objects[self.logicObject['spawner']] if 'spawner' in self.logicObject else self.logicObject
         self.orientator = self.logicObject.scene.objects[self.logicObject['orientator']] if 'orientator' in self.logicObject else self.logicObject
         self.spawnRot = self.logicObject['spawnRot'] if 'spawnRot' in self.logicObject else None
-        self.rotation = [0.0,0.0,0.0]
 
     def destroy(self):
         pass
@@ -34,7 +33,7 @@ class Spawner:
         for ended_ring in ended:
             self.rings.remove(ended_ring)
 
-    def spawn(self):
+    def spawn(self, rotation):
         ring_names = self._getRingNames()
 
         if len(ring_names) < 1:
@@ -51,7 +50,7 @@ class Spawner:
                 spawnRotObj = self.logicObject.scene.addObject(self.spawnRot, self.spawnRot)
                 spawnRotObj.setParent(self.spawn_parent)
                 obj.setParent(spawnRotObj)
-                spawnRotObj.localOrientation = self.rotation
+                spawnRotObj.localOrientation = rotation
             else:
                 obj.setParent(self.spawn_parent)
 
