@@ -1,0 +1,67 @@
+<html>
+<head>
+  <script type="text/javascript">
+    function log(txt, clear){
+
+      var el = document.getElementById('log');
+      if(clear === true){
+          el.innerHTML = txt;
+      } else {
+        el.innerHTML += txt+'\n';
+      }
+    }
+
+    function send(command){
+      var xmlhttp = new XMLHttpRequest();
+
+      xmlhttp.onreadystatechange = function(){
+        if (xmlhttp.readyState != XMLHttpRequest.DONE )
+          return;
+
+        var txt = xmlhttp.status + ' ' + xmlhttp.statusText;
+        if(xmlhttp.response == '')
+          txt += ' (empty)';
+        else
+          txt += ' - ' + xmlhttp.response;
+
+        log(txt);
+      }
+
+      log('GET /api/'+command);
+      xmlhttp.open('GET', '/api/'+command);
+      xmlhttp.send();
+    }
+
+
+    function start(){
+      window.addEventListener("deviceorientation", handleOrientation, true);
+      window.__intervalID = setInterval(sendInterval, 200);
+    }
+
+    function stop(){
+      window.removeEventListener("deviceorientation", handleOrientation, true);
+      clearInterval(window.__intervalID);
+    }
+
+    function handleOrientation(event){
+      window.__rot = [event.alpha, event.beta, event.gamma];
+    }
+
+    window.__rot = [0.0,0.0,0.0]
+
+    function sendInterval(){
+      log('rot: ' + window.__rot[0] + ', ' + window.__rot[1] + ', ' + window.__rot[2], true);
+      var xmlhttp = new XMLHttpRequest();
+      xmlhttp.open('GET', '/rot/'+window.__rot[0]+'/'+window.__rot[1]+'/'+window.__rot[2]);
+      xmlhttp.send();
+    }
+    </script>
+</head>
+<body>
+  <a href="#" onclick="start(); return false;">start</a>
+  <a href="#" onclick="stop(); return false;">stop</a>
+  <hr/>
+  <pre id="log">
+  </pre>
+</body>
+</html>
