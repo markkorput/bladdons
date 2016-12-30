@@ -1,76 +1,76 @@
-import logging, threading, time, socket, os
-import urllib.request
+import logging, threading, os, urllib.request, re
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from evento import Event
 
-def createRequestHandler(event_manager = None, requestEvent = None, _options = {}):
+def createRequestHandlerClass(folder='.', requestEvent=Event(), fileNotFoundRequestEvent=Event(), custom_handlers=[]):
     class CustomHandler(SimpleHTTPRequestHandler, object):
         def __init__(self, *args, **kwargs):
             # do_stuff_with(self, init_args)
-            self.options = _options
-            self.root_path = self.options['serve'] if 'serve' in _options else '.'
-            self.event_manager = event_manager
+            self.root_path = folder
             self.requestEvent = requestEvent
+            self.fileNotFoundRequestEvent = fileNotFoundRequestEvent
+            self.custom_handlers = custom_handlers
+            self.compiled_handlers = list(map(lambda x: [re.compile(x[0]), x[1]], custom_handlers))
+            self._handled = False
             super(CustomHandler, self).__init__(*args, **kwargs)
 
-
-        def process_request(self):
-            result = False
-            if self.event_manager != None and 'output_events' in self.options:
-                if self.path in self.options['output_events']:
-                    self.event_manager.fire(self.options['output_events'][self.path])
-                    result = True
-
-            if 'responses' in self.options and self.path in self.options['responses']:
-                self.wfile.write(self.options['responses'][self.path])
-                # self.wfile.close()
-                result = True
-            elif result == True:
-                self.send_response(200)
-                self.end_headers()
-
-            if self.requestEvent:
-                self.requestEvent(self)
-
-            return result
-
         def do_HEAD(self):
-            try:
-                if self.process_request():
-                    return
-                super(CustomHandler, self).do_HEAD()
-            except:
-                pass
+            print('HEAD request')
+            print(self)
 
         def do_GET(self):
-            try:
-                if self.process_request():
-                    return
-                super(CustomHandler, self).do_GET()
-            except:
-                pass
+            for regex, handler in self.compiled_handlers:
+                match = regex.findall(self.path)
+                if len(match) == 1:
+                    handler(self, *match[0])
+                    if self.get_handled():
+                        return
+
+            # notify listeners about request and give them a chance to process the request
+            self.requestEvent(self)
+
+            # if any of the listeners marked the request as handled, we're done
+            if self.get_handled():
+                return
+
+            file_path = self.translate_path(self.path)
+
+            if os.path.isfile(file_path):
+                # if the request path matches with any of the local files in the public folder,
+                # simply let SimpleHTTPRequestHandler serve that file
+                return super(CustomHandler, self).do_GET()
+
+            # trigger file not found request event and give listeners a chance to handle the request
+            fileNotFoundRequestEvent(self)
+
+            # again, if any of the listeners marked the request as handled, we're done
+            if self.get_handled():
+                return
+
+            # let the original handler respond with a 404
+            return super(CustomHandler, self).do_GET()
 
         def do_POST(self):
-            try:
-                if self.process_request():
-                    return
-                super(CustomHandler, self).do_POST()
-            except:
-                pass
+            print('POST REQUEST')
+            print(self)
 
         def translate_path(self, path):
-            if self.event_manager != None and 'output_events' in self.options:
-                if path in self.options['output_events']:
-                    self.event_manager.fire(self.options['output_events'][path])
-                    # self.send_error(204)
-                    self.send_response(200)
-                    self.wfile.write('OK')
-                    self.wfile.close()
-                    return ''
-
+            # we only provide acces into the specified folder, so turn ay absolute path into a relative path
             relative_path = path[1:] if path.startswith('/') else path
-            # if relative_path == '' or relative_path.endswith('index.html'):
-            return SimpleHTTPRequestHandler.translate_path(self, os.path.join(self.root_path, relative_path))
+            full_path = os.path.join(self.root_path, relative_path)
+            return SimpleHTTPRequestHandler.translate_path(self, full_path)
+
+        def get_handled(self):
+            return self._handled
+
+        def set_handled(self, value=True):
+            self._handled = value
+
+        def respond_ok(self):
+            self.send_response(200)
+            self.end_headers()
+            self.set_handled()
+            # self.wfile.write(self.options['responses'][self.path])
 
         # cleanup log
         def log_request(self, *args, **kwargs):
@@ -82,90 +82,72 @@ def createRequestHandler(event_manager = None, requestEvent = None, _options = {
     return CustomHandler
 
 class WebServer(threading.Thread):
-    def __init__(self, options = {}):
+    def __init__(self, verbose=False, folder='.', port=2031):
         threading.Thread.__init__(self)
-        self.options = options
+        self.folder = folder
+        self.port = port
         self.http_server = None
-        self.event_manager = None
-        self.threading_event = None
-        self.daemon=True
 
         # attributes
         self.logger = logging.getLogger(__name__)
-        if 'verbose' in options and options['verbose']:
+        if verbose:
             self.logger.setLevel(logging.DEBUG)
 
         self.requestEvent = Event()
+        self.fileNotFoundRequestEvent = Event()
+        self._added_handlers = []
 
     def __del__(self):
         self.destroy()
 
-    def setup(self, event_manager=None):
-        self.event_manager = event_manager
+    def setup(self):
         self.logger.debug("Starting http server thread")
-        self.threading_event = threading.Event()
-        self.threading_event.set()
         self.start() # start thread
 
     def destroy(self):
-        self.event_manager = None
-
         if not self.isAlive():
             return
 
         if self.http_server:
             self.http_server.socket.close()
 
-        self.threading_event.clear()
-
-        try:
-            with urllib.request.urlopen('http://127.0.0.1:{0}'.format(self.port())) as f:
-                f.read()
-        except urllib.error.URLError:
-            pass
-        # self.logger.debug('Sending dummy HTTP request to stop HTTP server from blocking...')
-        # try:
-        #     connection = httplib.HTTPConnection('127.0.0.1', self.port())
-        #     connection.request('HEAD', '/')
-        #     connection.getresponse()
-        # except socket.error:
-        #     pass
-
+        # wait until server thread finishes
         self.join()
 
     # thread function
     def run(self):
-        self.logger.warning('Starting HTTP server on port {0}'.format(self.port()))
-        HandlerClass = createRequestHandler(self.event_manager, self.requestEvent, self.options)
-        # self.http_server = HTTPServer(('', self.port()), HandlerClass)
-        self.http_server = HTTPServer(('', self.port()), HandlerClass)
+        self.logger.warning('Starting HTTP server on port {0}'.format(self.port))
+        HandlerClass = createRequestHandlerClass(folder=self.folder, requestEvent=self.requestEvent, fileNotFoundRequestEvent=self.fileNotFoundRequestEvent, custom_handlers=self._added_handlers)
 
-        # # self.httpd.serve_forever()
-        # # self.httpd.server_activate()
-        # while self.threading_event.is_set(): #not self.kill:
-        #     try:
-        #         self.http_server.handle_request()
-        #     except Exception as exc:
-        #         print('http exception:')
-        #         print(exc)
+        # self.http_server = HTTPServer(('', self.port, HandlerClass)
+        self.http_server = HTTPServer(('', self.port), HandlerClass)
+
         try:
             self.http_server.serve_forever()
-        except:
+        except OSError as err:
+            # OSError #9 ("Bad file descriptor") is caused by closing of the socket,
+            # which is our way of shutting down the HTTP server
+            if err.errno != 9:
+                self.logger.error(err)
+        except ValueError:
             pass
 
-        print('http server closed')
-
-        self.logger.warning('Closing HTTP server at port {0}'.format(self.port()))
+        self.logger.warning('Closing HTTP server at port {0}'.format(self.port))
         self.http_server.server_close()
         self.http_server = None
 
-    def port(self):
-        return self.options['port'] if 'port' in self.options else 2031
+    def add_handler(self, pattern, handler):
+        self._added_handlers.append((pattern, handler))
+
+    def clear_handlers(self):
+        self._added_handlers.clear()
 
 # for testing
 if __name__ == '__main__':
+    import time
+
     logging.basicConfig()
-    ws = WebServer({'verbose': True, 'serve': 'examples'})
+    ws = WebServer(verbose=True, folder='examples')
     try:
         ws.setup()
         while True:
