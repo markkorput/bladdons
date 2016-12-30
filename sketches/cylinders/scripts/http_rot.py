@@ -22,8 +22,9 @@ class HttpRot:
         self.destroy()
 
     def setup(self):
+        # self.web_server.add_handler('^/rot/(-{0,1}\d*\.{0,1}\d*)/(-{0,1}\d*\.{0,1}\d*)/(-{0,1}\d*\.{0,1}\d*)$', self._onRot)
+        self.web_server.add_handler('^/rot/(.+)/(.+)/(.+)$', self._onRot)
         self.web_server.setup()
-        self.web_server.fileNotFoundRequestEvent += self._onFileNotFoundRequest
 
     def update(self):
         self.anim_manager.update()
@@ -35,37 +36,21 @@ class HttpRot:
             anim._from[2] + (anim._to[2]-anim._from[2]) * anim.progress]
 
     def destroy(self):
+        self.web_server.clear_handlers()
         self.web_server.destroy()
 
-        if self._onFileNotFoundRequest in self.web_server.fileNotFoundRequestEvent:
-            self.web_server.fileNotFoundRequestEvent -= self._onFileNotFoundRequest
-
-    def _onFileNotFoundRequest(self, handler):
-        result = re.compile('^\/rot/(.+)\/(.+)\/(.+)$').findall(handler.path)
-
-        if len(result) != 1 or len(result[0]) != 3:
-            return
-
+    def _onRot(self, handler, *args):
         handler.respond_ok()
-
-        try:
-            a = float(result[0][0])
-        except:
-            a = 0.0
-
-        try:
-            b = float(result[0][1])
-        except:
-            b = 0.0
-
-        try:
-            c = float(result[0][2])
-        except:
-            c = 0.0
-
-        self.logger.debug('Got orientation data from HTTP-server: {0}, {1}, {2}'.format(a,b,c))
-        # self.rotation = [math.radians(c),math.radians(-b),math.radians(a)]
         anim = self.anim_manager.anims[0]
         anim._from = self.rotation
-        anim._to = [math.radians(c),math.radians(-b),math.radians(a)]
+        values = map(lambda x: float(x), args)
+
+        try:
+            values = list(map(lambda x: math.radians(x), values))
+        except:
+            print('Invalid rotation value(s): {0}'.format(args))
+            return
+
+        self.logger.debug('Got orientation data from HTTP-server: {0}'.format(values))
+        anim._to = values
         anim.start()

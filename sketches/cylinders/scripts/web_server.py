@@ -1,15 +1,16 @@
-import logging, threading, time, socket, os
-import urllib.request
+import logging, threading, os, urllib.request, re
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from evento import Event
 
-def createRequestHandlerClass(folder='.', requestEvent=Event(), fileNotFoundRequestEvent=Event()):
+def createRequestHandlerClass(folder='.', requestEvent=Event(), fileNotFoundRequestEvent=Event(), custom_handlers=[]):
     class CustomHandler(SimpleHTTPRequestHandler, object):
         def __init__(self, *args, **kwargs):
             # do_stuff_with(self, init_args)
             self.root_path = folder
             self.requestEvent = requestEvent
             self.fileNotFoundRequestEvent = fileNotFoundRequestEvent
+            self.custom_handlers = custom_handlers
+            self.compiled_handlers = list(map(lambda x: [re.compile(x[0]), x[1]], custom_handlers))
             self._handled = False
             super(CustomHandler, self).__init__(*args, **kwargs)
 
@@ -18,6 +19,13 @@ def createRequestHandlerClass(folder='.', requestEvent=Event(), fileNotFoundRequ
             print(self)
 
         def do_GET(self):
+            for regex, handler in self.compiled_handlers:
+                match = regex.findall(self.path)
+                if len(match) == 1:
+                    handler(self, *match[0])
+                    if self.get_handled():
+                        return
+
             # notify listeners about request and give them a chance to process the request
             self.requestEvent(self)
 
@@ -87,6 +95,7 @@ class WebServer(threading.Thread):
 
         self.requestEvent = Event()
         self.fileNotFoundRequestEvent = Event()
+        self._added_handlers = []
 
     def __del__(self):
         self.destroy()
@@ -108,7 +117,7 @@ class WebServer(threading.Thread):
     # thread function
     def run(self):
         self.logger.warning('Starting HTTP server on port {0}'.format(self.port))
-        HandlerClass = createRequestHandlerClass(folder=self.folder, requestEvent=self.requestEvent, fileNotFoundRequestEvent=self.fileNotFoundRequestEvent)
+        HandlerClass = createRequestHandlerClass(folder=self.folder, requestEvent=self.requestEvent, fileNotFoundRequestEvent=self.fileNotFoundRequestEvent, custom_handlers=self._added_handlers)
 
         # self.http_server = HTTPServer(('', self.port, HandlerClass)
         self.http_server = HTTPServer(('', self.port), HandlerClass)
@@ -123,14 +132,20 @@ class WebServer(threading.Thread):
         except ValueError:
             pass
 
-        # print('HTTP-server at port {0} closed'.format(self.port))
-
         self.logger.warning('Closing HTTP server at port {0}'.format(self.port))
         self.http_server.server_close()
         self.http_server = None
 
+    def add_handler(self, pattern, handler):
+        self._added_handlers.append((pattern, handler))
+
+    def clear_handlers(self):
+        self._added_handlers.clear()
+
 # for testing
 if __name__ == '__main__':
+    import time
+
     logging.basicConfig()
     ws = WebServer(verbose=True, folder='examples')
     try:
