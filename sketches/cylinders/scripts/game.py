@@ -29,7 +29,6 @@ class Game:
         verbose = 'verbose' in self.owner and self.owner['verbose']
         self.logger = logging.getLogger(__name__)
         if verbose:
-            # print('verbosing for '+owner.name)
             self.logger.setLevel(logging.DEBUG)
 
         self.ui = Ui.singleton(verbose=verbose)
@@ -49,6 +48,7 @@ class Game:
         self.destroy()
 
     def destroy(self):
+        self.logger.debug('Game.destroy')
         self.spawner.destroy()
         self.http_rot.destroy()
 
