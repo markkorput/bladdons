@@ -9,9 +9,7 @@ class HttpRot:
             # print('verbosing for '+owner.name)
             self.logger.setLevel(logging.DEBUG)
 
-        self.web_server = WebServer({
-            'verbose': verbose,
-            'serve': wwwFolder})
+        self.web_server = WebServer(verbose=verbose, folder=wwwFolder)
 
         self.rotation = [0.0,0.0,0.0]
         self.anim_manager = Manager(removeFinished=False, verbose=verbose)
@@ -25,7 +23,7 @@ class HttpRot:
 
     def setup(self):
         self.web_server.setup()
-        self.web_server.requestEvent += self._onRequest
+        self.web_server.fileNotFoundRequestEvent += self._onFileNotFoundRequest
 
     def update(self):
         self.anim_manager.update()
@@ -39,13 +37,16 @@ class HttpRot:
     def destroy(self):
         self.web_server.destroy()
 
-        if self._onRequest in self.web_server.requestEvent:
-            self.web_server.requestEvent -= self._onRequest
+        if self._onFileNotFoundRequest in self.web_server.fileNotFoundRequestEvent:
+            self.web_server.fileNotFoundRequestEvent -= self._onFileNotFoundRequest
 
-    def _onRequest(self, handler):
+    def _onFileNotFoundRequest(self, handler):
         result = re.compile('^\/rot/(.+)\/(.+)\/(.+)$').findall(handler.path)
+
         if len(result) != 1 or len(result[0]) != 3:
             return
+
+        handler.respond_ok()
 
         try:
             a = float(result[0][0])
