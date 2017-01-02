@@ -2,15 +2,14 @@ import logging, threading, os, urllib.request, re
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from evento import Event
 
-def createRequestHandlerClass(folder='.', requestEvent=Event(), fileNotFoundRequestEvent=Event(), custom_handlers=[]):
+def createRequestHandlerClass(folder='.', requestEvent=Event(), fileNotFoundRequestEvent=Event(), compiled_handlers=[]):
     class CustomHandler(SimpleHTTPRequestHandler, object):
         def __init__(self, *args, **kwargs):
             # do_stuff_with(self, init_args)
             self.root_path = folder
             self.requestEvent = requestEvent
             self.fileNotFoundRequestEvent = fileNotFoundRequestEvent
-            self.custom_handlers = custom_handlers
-            self.compiled_handlers = list(map(lambda x: [re.compile(x[0]), x[1]], custom_handlers))
+            self.compiled_handlers = compiled_handlers
             self._handled = False
             super(CustomHandler, self).__init__(*args, **kwargs)
 
@@ -117,7 +116,8 @@ class WebServer(threading.Thread):
     # thread function
     def run(self):
         self.logger.warning('Starting HTTP server on port {0}'.format(self.port))
-        HandlerClass = createRequestHandlerClass(folder=self.folder, requestEvent=self.requestEvent, fileNotFoundRequestEvent=self.fileNotFoundRequestEvent, custom_handlers=self._added_handlers)
+        compiled_handlers = list(map(lambda x: [re.compile(x[0]), x[1]], self._added_handlers))
+        HandlerClass = createRequestHandlerClass(folder=self.folder, requestEvent=self.requestEvent, fileNotFoundRequestEvent=self.fileNotFoundRequestEvent, compiled_handlers=compiled_handlers)
 
         # self.http_server = HTTPServer(('', self.port, HandlerClass)
         self.http_server = HTTPServer(('', self.port), HandlerClass)
