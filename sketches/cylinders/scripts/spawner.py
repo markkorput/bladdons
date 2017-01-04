@@ -1,5 +1,5 @@
 import logging, random
-
+from .colorize import Colorize
 class Spawner:
     def __init__(self, verbose=False):
         self.rings = []
@@ -14,7 +14,6 @@ class Spawner:
     def setup(self, logicObject):
         self.logicObject = logicObject
         self.spawn_parent = self.logicObject.scene.objects[self.logicObject['spawner']] if 'spawner' in self.logicObject else self.logicObject
-        self.orientator = self.logicObject.scene.objects[self.logicObject['orientator']] if 'orientator' in self.logicObject else self.logicObject
         self.spawnRot = self.logicObject['spawnRot'] if 'spawnRot' in self.logicObject else None
 
     def destroy(self):
@@ -32,6 +31,7 @@ class Spawner:
 
         for ended_ring in ended:
             self.rings.remove(ended_ring)
+            Colorize.destroy_by_owner(ended_ring)
 
     def spawn(self, rotation):
         ring_names = self._getRingNames()
@@ -55,9 +55,10 @@ class Spawner:
                 obj.setParent(self.spawn_parent)
 
             self.rings.append(obj)
-
             self.logger.debug('playAction: ring1Action')
             obj.playAction('ring1Action', 26, 100)
+            clrz = Colorize.for_owner(obj)
+
         except ValueError as err:
             self.logger.error("Erro while spawning ring:\n\n{0}\n".format(err))
 

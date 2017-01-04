@@ -1,5 +1,15 @@
 <html>
 <head>
+  <style>
+        body{ margin: 0; padding: 0; }
+        #blRemote{ text-align: center; display: block; margin: 0; padding-top:100px; width: 100%; height: 100%}
+        #blRemote a{ display: inline-block; padding: 50px 100px; margin: 0 auto; background-color: rgba(255, 200, 100, 0.5); color: #000; font-size: 24px; text-decoration: none; }
+
+        #blRemote.idle{ background-color: rgb(200,100,100);}
+        #blRemote.idle #stop{ display: none }
+        #blRemote.running{ background-color: rgb(100,150,100);}
+        #blRemote.running #start{ display: none }
+  </style>
   <script type="text/javascript">
     function log(txt, clear){
 
@@ -34,11 +44,15 @@
 
 
     function start(){
+      var el = document.getElementById('blRemote');
+      el.className = 'running';
       window.addEventListener("deviceorientation", handleOrientation, true);
       window.__intervalID = setInterval(sendInterval, 200);
     }
 
     function stop(){
+      var el = document.getElementById('blRemote');
+      el.className = 'idle';
       window.removeEventListener("deviceorientation", handleOrientation, true);
       clearInterval(window.__intervalID);
     }
@@ -58,10 +72,11 @@
     </script>
 </head>
 <body>
-  <a href="#" onclick="start(); return false;">start</a>
-  <a href="#" onclick="stop(); return false;">stop</a>
-  <hr/>
-  <pre id="log">
-  </pre>
+    <div id="blRemote" class="idle">
+        <a href="#" onclick="start(); return false;" id="start">start</a>
+        <a href="#" onclick="stop(); return false;" id="stop">stop</a>
+        <pre id="log">
+        </pre>
+    </div>
 </body>
 </html>
