@@ -7,16 +7,26 @@ class Anim:
         self.active = False
         self.progress = 0.0
         self.finished = False
+        self.last_update = None
 
     def start(self):
         self.t = 0.0
         self.active = True
         self.progress = 0.0
         self.finished = False
+        self.last_update = None
 
-    def update(self, dt):
+    def update(self, dt=None):
         if not self.active:
             return
+
+        if not dt:
+            if not self.last_update:
+                self.last_update = time.time()
+                dt = 0.0
+            else:
+                t = time.time()
+                self.last_update, dt = (t, t - self.last_update)
 
         self.t += dt
         self.progress = (self.t / self.duration)

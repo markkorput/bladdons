@@ -1,4 +1,5 @@
-import bge
+from .colorize import Colorize
+import time
 
 def apply(controller):
     owner = controller.owner
@@ -11,12 +12,15 @@ def apply(controller):
                 shader.setSource(VertexShader, FragmentShader, 1)
             colorobj = owner.scene.objects[owner['colorobj']] if 'colorobj' in owner else owner
             xyz = colorobj.localOrientation.to_euler()
-            shader.setUniform3f('customColor', xyz.x, xyz.y, xyz.z)
+            colors = (owner.localPosition.z, xyz.y, xyz.z)
+            factors = (time.time() * 0.01, time.time() * 0.015, time.time() * 0.223)
+            colors = Colorize.for_owner(owner).get_colors()
+            shader.setUniform3f('customColor', *list(map(lambda x: x % 1, colors)))
+
 
 VertexShader = """
     // varying vec4 color;
     varying vec4 texCoords;
-
 
     void main() // all vertex shaders define a main() function
     {
