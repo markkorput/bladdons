@@ -1,4 +1,4 @@
-import logging, bpy
+import logging, bpy, bge, random, math
 from .ui import Ui
 from .spawner import Spawner
 from .http_rot import HttpRot
@@ -44,6 +44,8 @@ class Game:
         self.spawner.setup(logicObject=self.owner)
         bpy.app.handlers.game_post.append(self._onGameEnded)
 
+        self.ui.keyPressEvent += self._onKey
+
     def _onGameEnded(self, scene):
         self.destroy()
 
@@ -55,8 +57,15 @@ class Game:
         if self._onGameEnded in bpy.app.handlers.game_post:
             bpy.app.handlers.game_post.remove(self._onGameEnded)
 
+        if self._onKey in self.ui.keyPressEvent:
+            self.ui.keyPressEvent -= self._onKey
+
     def update(self):
         self.ui.update()
         self.spawner.update()
         self.spawner.spawn(self.http_rot.rotation)
         self.http_rot.update()
+
+    def _onKey(self, keyCode):
+        if keyCode == bge.events.PAD1:
+            self.http_rot.rotation = (random.random() * math.pi * 2, random.random() * math.pi * 2, random.random() * math.pi * 2)
