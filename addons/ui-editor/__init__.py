@@ -10,7 +10,7 @@ bl_info = {
     "tracker_url": "",
     "category": "System"}
 
-import logging
+import logging, math
 import bpy
 from bpy.app.handlers import persistent
 from mathutils import Vector
@@ -70,11 +70,12 @@ class ObjectRunner:
         Processor(self.object, self.osc_sender, self.dataCache, verbose=self.config.verbose).process()
 
 class Processor:
-    def __init__(self, object, osc_sender, dataCache, scope=None, verbose=False):
+    def __init__(self, object, osc_sender, dataCache, scope=None, changesOnly=False, verbose=False):
         self.object = object
         self.osc_sender = osc_sender
         self.dataCache = dataCache
         self.scope = scope
+        self.changesOnly = changesOnly
         self.verbose = verbose
 
         # self.logger = logging.getLogger(__name__)
@@ -106,7 +107,7 @@ class Processor:
 
         for prop_name in prop_names:
             # only send changed properties
-            if previousData == None or data[prop_name] != previousData[prop_name]:
+            if previousData == None or data[prop_name] != previousData[prop_name] or not self.changesOnly:
                 self.osc_sender.send(basePath+prop_name, [
                                 obj_id,
                                 data[prop_name].x,
@@ -114,7 +115,7 @@ class Processor:
                                 data[prop_name].z])
 
         # Vertices (array of Vectors/vec3)
-        if previousData == None or data['vertices'] != previousData['vertices']:
+        if previousData == None or data['vertices'] != previousData['vertices'] or not self.changesOnly:
             vertexParams = [obj_id]
             for vertex in data['vertices']:
                 vertexParams.append(vertex.x)
@@ -146,7 +147,7 @@ class Processor:
             'id': self.object.name, #self.obj_id(),
             # 'type': self.ui_type(),
             'position': Vector(self.object.location),
-            'rotation': Vector(self.object.rotation_euler),
+            'rotation': Vector(self.object.rotation_euler) * 180 / math.pi,
             'scale': Vector(self.object.scale),
             'vertices': [Vector(v.co) for v in self.object.data.vertices]
         }
