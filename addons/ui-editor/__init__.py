@@ -98,7 +98,8 @@ class Processor:
             Processor(child, self.osc_sender, self.dataCache, scope=scope, verbose=self.verbose).process()
 
     def _send_changes(self, data, previousData):
-        basePath = '/ui-editor/mesh/'+data['id']+'/'
+        basePath = '/ui-editor/mesh/'
+        obj_id = self.scope + '/' + data['id'] if self.scope else data['id']
 
         # Vectors (vec3)
         prop_names = ['position', 'rotation', 'scale']
@@ -107,13 +108,14 @@ class Processor:
             # only send changed properties
             if previousData == None or data[prop_name] != previousData[prop_name]:
                 self.osc_sender.send(basePath+prop_name, [
+                                obj_id,
                                 data[prop_name].x,
                                 data[prop_name].y,
                                 data[prop_name].z])
 
         # Vertices (array of Vectors/vec3)
         if previousData == None or data['vertices'] != previousData['vertices']:
-            vertexParams = []
+            vertexParams = [obj_id]
             for vertex in data['vertices']:
                 vertexParams.append(vertex.x)
                 vertexParams.append(vertex.y)
