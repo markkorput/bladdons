@@ -152,6 +152,32 @@ class Processor:
             'vertices': [Vector(v.co) for v in self.object.data.vertices]
         }
 
+class PlaneGeneratorOp(bpy.types.Operator):
+    """Adds an object with a plane-primitive mesh with the position of the object
+    aligned to the bottom left corner of the plane"""
+    bl_idname = "object.uieditorplanegenerator"
+    bl_label = "PointCloud"
+    # bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.object and context.scene
+
+    def execute(self, context):
+        parent = context.active_object if context.active_object.type == 'MESH' and len(context.active_object.data.vertices) == 4 else None
+
+        bpy.ops.mesh.primitive_plane_add(radius=1.0, location=(0,0,0))
+        for v in context.active_object.data.vertices:
+            v.co.x += 1.0
+            v.co.y += 1.0
+
+        if parent:
+            context.active_object.parent = parent
+            context.active_object.location.z = parent.location.z + 0.0001
+
+        # Runner.instance_for(context.scene).send_obj_props(context.object, True)
+        return {'FINISHED'}
+
 # This class is in charge of the blender UI config panel
 class Panel(bpy.types.Panel):
     """Creates a Panel in the Object properties window"""
@@ -169,6 +195,8 @@ class Panel(bpy.types.Panel):
             layout.row().prop(config, "host")
             layout.row().prop(config, "port")
             layout.row().prop(config, "changesOnly")
+        layout.row().operator("object.uieditorplanegenerator", text="Add plane")
+
 
 # This class represents the bl2030 config data (used by the UI Panel)
 class Config(bpy.types.PropertyGroup):
