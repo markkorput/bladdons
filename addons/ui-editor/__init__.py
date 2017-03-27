@@ -67,7 +67,7 @@ class ObjectRunner:
     def update(self):
         self.osc_sender.setVerbose(self.config.verbose)
         # self and all child objects (recursively)
-        Processor(self.object, self.osc_sender, self.dataCache, verbose=self.config.verbose).process()
+        Processor(self.object, self.osc_sender, self.dataCache, changesOnly=self.config.changesOnly, verbose=self.config.verbose).process()
 
 class Processor:
     def __init__(self, object, osc_sender, dataCache, scope=None, changesOnly=False, verbose=False):
@@ -168,7 +168,7 @@ class Panel(bpy.types.Panel):
         if(config.enabled):
             layout.row().prop(config, "host")
             layout.row().prop(config, "port")
-            layout.row().prop(config, "verbose")
+            layout.row().prop(config, "changesOnly")
 
 # This class represents the bl2030 config data (used by the UI Panel)
 class Config(bpy.types.PropertyGroup):
@@ -184,6 +184,7 @@ class Config(bpy.types.PropertyGroup):
     cls.port = bpy.props.IntProperty(name="Port", soft_max=9999, soft_min=0, default=8080, description="Port to send OSC messages to")
     cls.host = bpy.props.StringProperty(name="Host", default="127.0.0.1")
     # cls.live_update = bpy.props.BoolProperty(name="live_update", default=False)
+    cls.changesOnly = bpy.props.BoolProperty(name="changesOnly", default=False, description="only send properties that have changed")
     cls.verbose = bpy.props.BoolProperty(name="verbose", default=False)
     # cls.last_messages = bpy.props.StringProperty(name="Last Messages", default="")
 
