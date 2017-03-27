@@ -34,7 +34,7 @@ class Runner:
         pass
 
     def update(self):
-        # loop-over-and-update all root-level objects
+        # loop-over-and-update all root-level bmeshects
         for obj in self.scene.objects:
             if obj.type == 'MESH' and obj.parent == None and obj.uiEditorCfg.enabled == True:
                 ObjectRunner.instance_for(obj).update()
@@ -178,6 +178,39 @@ class PlaneGeneratorOp(bpy.types.Operator):
         # Runner.instance_for(context.scene).send_obj_props(context.object, True)
         return {'FINISHED'}
 
+class PlaneFixerOp(bpy.types.Operator):
+    """Fixes the current active mesh object, so it has four vertices, which form
+    a straight rectangle, with the lower left corner aligned with the object's position"""
+    bl_idname = "object.uieditorplanefixer"
+    bl_label = "PointCloud"
+    # bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.active_object and context.scene
+
+    def execute(self, context):
+        ob = context.active_object
+
+        if not ob:
+            return {'CANCELLED'}
+
+        minX = minY = maxX = maxY = 0.0
+
+        print('going for '+ob.name)
+        for v in context.active_object.data.vertices:
+            minX = min(minX, v.co.x)
+            maxX = max(maxX, v.co.x)
+            minY = min(minY, v.co.y)
+            maxY = max(maxY, v.co.y)
+
+        bpy.ops.object.mode_set(mode='OBJECT')
+        ob.data.vertices[0].co = Vector((0, 0, 0.0))
+        ob.data.vertices[1].co = Vector((maxX-minX, 0, 0.0))
+        ob.data.vertices[2].co = Vector((0, maxY-minY, 0.0))
+        ob.data.vertices[3].co = Vector((maxX-minX, maxY-minY, 0.0))
+        return {'FINISHED'}
+
 # This class is in charge of the blender UI config panel
 class Panel(bpy.types.Panel):
     """Creates a Panel in the Object properties window"""
@@ -196,7 +229,7 @@ class Panel(bpy.types.Panel):
             layout.row().prop(config, "port")
             layout.row().prop(config, "changesOnly")
         layout.row().operator("object.uieditorplanegenerator", text="Add plane")
-
+        layout.row().operator("object.uieditorplanefixer", text="Fix plane")
 
 # This class represents the bl2030 config data (used by the UI Panel)
 class Config(bpy.types.PropertyGroup):
