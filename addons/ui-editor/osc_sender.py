@@ -11,6 +11,20 @@ except ImportError as e:
     logging.getLogger().warning("Could not import pythonosc library for OscSender")
 
 class OscSender:
+
+    _instances = {}
+    def instance_for(host='127.0.0.1', port=8080):
+        identifier = str(host) + ':' + str(port)
+
+        # existing instance
+        if identifier in OscSender._instances:
+            return OscSender._instances[identifier]
+
+        # new instance
+        newInstance = OscSender(host, port)
+        OscSender._instances[identifier] = newInstance
+        return newInstance
+
     def __init__(self, host='127.0.0.1', port=8080):
         # attributes
         self.client = None
@@ -19,28 +33,20 @@ class OscSender:
         self.host = host
         self.port = port
 
+        self.logger = logging.getLogger(__name__)
+
         # events
         #self.connectEvent = Event()
         #self.disconnectEvent = Event()
 
-        # configuration
-        self.options = {}
-        self.configure(options)
-
     def __del__(self):
         self.destroy()
 
-    def setup(self, host='127.0.0.1', port=8080):
-        self.host = host
-        self.port = port
+    def setup(self):
         self._connect()
 
     def destroy(self):
         self._disconnect()
-
-    def port(self):
-        # default is 8080
-        return int(self.options['port']) if 'port' in self.options else 8080
 
     def _connect(self):
         try:
@@ -50,7 +56,7 @@ class OscSender:
             #     logging.getLogger().warn("OSC broadcast destination detected")
             #     self.client.socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
-            self.client = UDPClient(host, port)
+            self.client = UDPClient(self.host, self.port)
             # sndbufsize = 4096 * 8
             # self.client._sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, sndbufsize)
             # self.client._sock.connect((self.host(), self.port()))
@@ -59,11 +65,11 @@ class OscSender:
             #     logging.getLogger().warn("OSC broadcast destination detected")
             #     self.client._sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         except Exception as err: #OSC.OSCClientError as err:
-            logging.getLogger().error("OSC connection failure: {0}".format(err))
+            self.logger.error("OSC connection failure: {0}".format(err))
             return False
 
         self.connected = True
-        logging.getLogger().info("OSC client connected to " + self.host + ':' + str(self.port)
+        self.logger.info("OSC client connected to " + self.host + ':' + str(self.port))
         # self.connectEvent(self)
         return True
 
@@ -72,7 +78,7 @@ class OscSender:
             # self.client.close()
             self.client = None
             self.connected = False
-            logging.getLogger().info("OSC client closed")
+            self.logger.info("OSC client closed")
             # self.disconnectEvent(self)
 
     def send(self, addr, params = []):
@@ -88,10 +94,19 @@ class OscSender:
 
         try:
             self.client.send(msg)
-            logging.getLogger().debug("OscSender.send " + addr)
+            self.logger.info("OscSender.send " + addr)
         except Exception as err: # OSC.OSCClientError as err:
-            logging.getLogger().error("OscSender.send " + addr + " FAILED: " + err)
-            pass
+            self.logger.error("OscSender.send " + addr + " FAILED: " + str(err))
+            raise err
             # ColorTerminal().warn("OSC failure: {0}".format(err))
             # no need to call connect again on the client, it will automatically
             # try to connect when we send the next message
+
+    def isConnected(self):
+        self.connected
+
+    def setVerbose(self, verbose=True):
+        if verbose:
+            self.logger.setLevel(logging.DEBUG)
+        else:
+            self.logger.setLevel(logging.WARNING)
